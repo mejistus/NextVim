@@ -4,6 +4,7 @@ local ns = vim.api.nvim_create_namespace("nextvim_welcome")
 local timer = nil
 local state = {
   bufnr = nil,
+  winid = nil,
   a = 0,
   b = 0,
 }
@@ -27,8 +28,22 @@ local function define_highlights()
   vim.api.nvim_set_hl(0, "NextVimWelcomeDonut4", { fg = "#b4f9f8", bold = true })
 end
 
+local function window_width()
+  if state.winid and vim.api.nvim_win_is_valid(state.winid) then
+    return vim.api.nvim_win_get_width(state.winid)
+  end
+  return vim.api.nvim_get_option_value("columns", {})
+end
+
+local function window_height()
+  if state.winid and vim.api.nvim_win_is_valid(state.winid) then
+    return vim.api.nvim_win_get_height(state.winid)
+  end
+  return vim.api.nvim_get_option_value("lines", {})
+end
+
 local function center_line(text)
-  local width = vim.api.nvim_get_option_value("columns", {})
+  local width = window_width()
   return string.rep(" ", math.max(0, math.floor((width - #text) / 2))) .. text
 end
 
@@ -40,7 +55,7 @@ local function clamp(value, min_value, max_value)
 end
 
 local function donut_size(visual_height)
-  local columns = vim.api.nvim_get_option_value("columns", {})
+  local columns = window_width()
   local available_height = math.max(1, visual_height)
   local min_height = math.min(8, available_height)
   local max_height = math.min(22, available_height)
@@ -118,32 +133,59 @@ local function render_donut(visual_height)
 end
 
 local function command_line(item)
-  local total = math.min(46, math.max(30, vim.o.columns - 10))
+  local width = window_width()
+  local total = math.min(46, math.max(30, width - 10))
   local left = item.label
   local right = string.format("[%s]", item.key)
   local gap = math.max(2, total - #left - #right)
-  return string.rep(" ", math.max(0, math.floor((vim.o.columns - total) / 2)))
+  return string.rep(" ", math.max(0, math.floor((width - total) / 2)))
     .. left
     .. string.rep(" ", gap)
     .. right
 end
 
-local function build_lines()
-  local height = vim.api.nvim_get_option_value("lines", {})
-  local bottom = {
-    "",
-    center_line("NextVim"),
-    center_line("Fast editing. Clear tools."),
-    "",
-  }
+local function build_bottom(height)
+  local bottom = {}
+
+  if height >= #menu + 4 then
+    vim.list_extend(bottom, {
+      "",
+      center_line("NextVim"),
+      center_line("Fast editing. Clear tools."),
+      "",
+    })
+  elseif height >= #menu + 2 then
+    vim.list_extend(bottom, {
+      center_line("NextVim"),
+      "",
+    })
+  end
+
   for _, item in ipairs(menu) do
     table.insert(bottom, command_line(item))
   end
 
-  local visual_height = math.max(1, height - #bottom)
-  local donut_lines, donut_height = render_donut(visual_height)
-  local top = math.max(0, math.floor((visual_height - donut_height) / 2))
-  local bottom_gap = math.max(0, visual_height - top - donut_height)
+  if #bottom > height then
+    bottom = vim.list_slice(bottom, 1, height)
+  end
+
+  return bottom
+end
+
+local function build_lines()
+  local height = window_height()
+  local bottom = build_bottom(height)
+  local visual_height = math.max(0, height - #bottom)
+  local donut_lines = {}
+  local donut_height = 0
+  local top = 0
+  local bottom_gap = visual_height
+
+  if visual_height > 0 then
+    donut_lines, donut_height = render_donut(visual_height)
+    top = math.max(0, math.floor((visual_height - donut_height) / 2))
+    bottom_gap = math.max(0, visual_height - top - donut_height)
+  end
 
   local lines = {}
   for _ = 1, top do
@@ -219,6 +261,12 @@ local function render()
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  if state.winid and vim.api.nvim_win_is_valid(state.winid) then
+    pcall(vim.api.nvim_win_set_cursor, state.winid, { 1, 0 })
+    vim.api.nvim_win_call(state.winid, function()
+      vim.cmd("normal! zt")
+    end)
+  end
   color_donut(bufnr, top, donut_height)
   color_text(bufnr, lines)
   vim.bo[bufnr].modifiable = false
@@ -259,6 +307,7 @@ function M.open()
   state.bufnr = bufnr
 
   vim.api.nvim_set_current_buf(bufnr)
+  state.winid = vim.api.nvim_get_current_win()
   vim.bo[bufnr].buftype = "nofile"
   vim.bo[bufnr].bufhidden = "wipe"
   vim.bo[bufnr].filetype = "nextvim-welcome"
