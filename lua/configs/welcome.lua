@@ -32,15 +32,25 @@ local function center_line(text)
   return string.rep(" ", math.max(0, math.floor((width - #text) / 2))) .. text
 end
 
+local function clamp(value, min_value, max_value)
+  if max_value < min_value then
+    return max_value
+  end
+  return math.max(min_value, math.min(max_value, value))
+end
+
 local function donut_size()
   local columns = vim.api.nvim_get_option_value("columns", {})
   local lines = vim.api.nvim_get_option_value("lines", {})
-  local reserved_lines = #menu + 5
-  local height = math.max(16, math.min(34, lines - reserved_lines))
-  local width = math.max(40, math.min(78, math.floor(height * 2.35), columns - 8))
+  local reserved_lines = #menu + 10
+  local available_height = math.max(5, lines - reserved_lines)
+  local height = math.min(clamp(math.floor(lines * 0.32), 8, 18), available_height)
+  local max_width = math.min(68, math.max(12, columns - 8))
+  local min_width = math.min(26, max_width)
+  local width = clamp(math.floor(height * 2.65), min_width, max_width)
 
-  if height > math.floor(width / 2) then
-    height = math.max(16, math.floor(width / 2))
+  if height > math.floor(width / 2.2) then
+    height = math.max(5, math.floor(width / 2.2))
   end
 
   return width, height
@@ -108,7 +118,7 @@ local function render_donut()
 end
 
 local function command_line(item)
-  local total = 46
+  local total = math.min(46, math.max(30, vim.o.columns - 10))
   local left = item.label
   local right = string.format("[%s]", item.key)
   local gap = math.max(2, total - #left - #right)
