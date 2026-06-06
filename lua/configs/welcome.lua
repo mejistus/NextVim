@@ -39,25 +39,25 @@ local function clamp(value, min_value, max_value)
   return math.max(min_value, math.min(max_value, value))
 end
 
-local function donut_size()
+local function donut_size(visual_height)
   local columns = vim.api.nvim_get_option_value("columns", {})
-  local lines = vim.api.nvim_get_option_value("lines", {})
-  local reserved_lines = #menu + 10
-  local available_height = math.max(5, lines - reserved_lines)
-  local height = math.min(clamp(math.floor(lines * 0.32), 8, 18), available_height)
-  local max_width = math.min(68, math.max(12, columns - 8))
-  local min_width = math.min(26, max_width)
-  local width = clamp(math.floor(height * 2.65), min_width, max_width)
+  local available_height = math.max(1, visual_height)
+  local min_height = math.min(8, available_height)
+  local max_height = math.min(22, available_height)
+  local height = clamp(math.floor(available_height * 0.65), min_height, max_height)
+  local max_width = math.min(76, math.max(12, columns - 8))
+  local min_width = math.min(math.max(28, math.floor(height * 2.4)), max_width)
+  local width = clamp(math.floor(height * 3.15), min_width, max_width)
 
   if height > math.floor(width / 2.2) then
-    height = math.max(5, math.floor(width / 2.2))
+    height = math.max(1, math.floor(width / 2.2))
   end
 
   return width, height
 end
 
-local function render_donut()
-  local donut_width, donut_height = donut_size()
+local function render_donut(visual_height)
+  local donut_width, donut_height = donut_size(visual_height)
   local chars = {}
   local zbuffer = {}
   for i = 1, donut_width * donut_height do
@@ -130,26 +130,30 @@ end
 
 local function build_lines()
   local height = vim.api.nvim_get_option_value("lines", {})
-  local content = {}
-
-  local donut_lines, donut_height = render_donut()
-  for _, line in ipairs(donut_lines) do
-    table.insert(content, line)
-  end
-  table.insert(content, "")
-  table.insert(content, center_line("NextVim"))
-  table.insert(content, center_line("Fast editing. Clear tools."))
-  table.insert(content, "")
+  local bottom = {
+    "",
+    center_line("NextVim"),
+    center_line("Fast editing. Clear tools."),
+    "",
+  }
   for _, item in ipairs(menu) do
-    table.insert(content, command_line(item))
+    table.insert(bottom, command_line(item))
   end
 
-  local top = math.max(0, math.floor((height - #content) / 2) - 1)
+  local visual_height = math.max(1, height - #bottom)
+  local donut_lines, donut_height = render_donut(visual_height)
+  local top = math.max(0, math.floor((visual_height - donut_height) / 2))
+  local bottom_gap = math.max(0, visual_height - top - donut_height)
+
   local lines = {}
   for _ = 1, top do
     table.insert(lines, "")
   end
-  vim.list_extend(lines, content)
+  vim.list_extend(lines, donut_lines)
+  for _ = 1, bottom_gap do
+    table.insert(lines, "")
+  end
+  vim.list_extend(lines, bottom)
   return lines, top, donut_height
 end
 
