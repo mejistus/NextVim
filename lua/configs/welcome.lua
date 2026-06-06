@@ -144,17 +144,16 @@ local function command_line(item)
     .. right
 end
 
-local function build_bottom(height)
+local function build_bottom(region_height)
   local bottom = {}
 
-  if height >= #menu + 4 then
+  if region_height >= #menu + 3 then
     vim.list_extend(bottom, {
-      "",
       center_line("NextVim"),
       center_line("Fast editing. Clear tools."),
       "",
     })
-  elseif height >= #menu + 2 then
+  elseif region_height >= #menu + 2 then
     vim.list_extend(bottom, {
       center_line("NextVim"),
       "",
@@ -165,8 +164,8 @@ local function build_bottom(height)
     table.insert(bottom, command_line(item))
   end
 
-  if #bottom > height then
-    bottom = vim.list_slice(bottom, 1, height)
+  if #bottom > region_height then
+    bottom = vim.list_slice(bottom, 1, region_height)
   end
 
   return bottom
@@ -174,17 +173,20 @@ end
 
 local function build_lines()
   local height = window_height()
-  local bottom = build_bottom(height)
-  local visual_height = math.max(0, height - #bottom)
+  local bottom_region = clamp(math.floor(height / 3), math.min(#menu, height), height)
+  local visual_height = math.max(0, height - bottom_region)
+  local bottom = build_bottom(bottom_region)
   local donut_lines = {}
   local donut_height = 0
   local top = 0
-  local bottom_gap = visual_height
+  local visual_bottom_gap = visual_height
+  local bottom_top_gap = math.max(0, math.floor((bottom_region - #bottom) / 2))
+  local bottom_gap = math.max(0, bottom_region - bottom_top_gap - #bottom)
 
   if visual_height > 0 then
     donut_lines, donut_height = render_donut(visual_height)
     top = math.max(0, math.floor((visual_height - donut_height) / 2))
-    bottom_gap = math.max(0, visual_height - top - donut_height)
+    visual_bottom_gap = math.max(0, visual_height - top - donut_height)
   end
 
   local lines = {}
@@ -192,10 +194,16 @@ local function build_lines()
     table.insert(lines, "")
   end
   vim.list_extend(lines, donut_lines)
-  for _ = 1, bottom_gap do
+  for _ = 1, visual_bottom_gap do
+    table.insert(lines, "")
+  end
+  for _ = 1, bottom_top_gap do
     table.insert(lines, "")
   end
   vim.list_extend(lines, bottom)
+  for _ = 1, bottom_gap do
+    table.insert(lines, "")
+  end
   return lines, top, donut_height
 end
 
