@@ -150,92 +150,30 @@ map("n", "<leader>wk", function()
   vim.cmd("WhichKey " .. vim.fn.input("WhichKey: "))
 end, { desc = "whichkey query lookup" })
 
-local function get_visual_range()
-  local s = vim.fn.getpos("'<")
-  local e = vim.fn.getpos("'>")
-  local srow, scol = s[2], s[3]
-  local erow, ecol = e[2], e[3]
-  if srow > erow or (srow == erow and scol > ecol) then
-    srow, erow = erow, srow
-    scol, ecol = ecol, scol
-  end
-  local mode = vim.fn.visualmode()
-  if mode == "V" then
-    scol = 1
-    ecol = #vim.fn.getline(erow) + 1
-  elseif mode == "\22" then
-    vim.notify("Blockwise visual mode is not supported for pair wrap/unwrap", vim.log.levels.WARN)
-    return nil
-  end
-  return srow - 1, math.max(scol - 1, 0), erow - 1, math.max(ecol, 0)
+local surround = require("configs.surround")
+
+-- Fixed pairs keep their dedicated keys; <leader>si / <leader>ri prompt for
+-- arbitrary text (html tags, \textbf{, **, ...).
+local pairs_map = {
+  ["'"] = { "'", "'", "quote" },
+  ['"'] = { '"', '"', "double quote" },
+  ["]"] = { "[", "]", "[]" },
+  ["}"] = { "{", "}", "{}" },
+  [")"] = { "(", ")", "()" },
+}
+
+for key, spec in pairs(pairs_map) do
+  local left, right, label = spec[1], spec[2], spec[3]
+  map("x", "<leader>" .. key, function()
+    surround.wrap(left, right)
+  end, { desc = "wrap with " .. label })
+  map("x", "<leader>r" .. key, function()
+    surround.unwrap(left, right)
+  end, { desc = "unwrap " .. label })
 end
 
-local function get_selected_text()
-  local bufnr = vim.api.nvim_get_current_buf()
-  local srow, scol, erow, ecol = get_visual_range()
-  if srow == nil then
-    return nil
-  end
-  local parts = vim.api.nvim_buf_get_text(bufnr, srow, scol, erow, ecol, {})
-  return table.concat(parts, "\n"), srow, scol, erow, ecol
-end
-
-local function replace_selected_text(new_text, srow, scol, erow, ecol)
-  local bufnr = vim.api.nvim_get_current_buf()
-  vim.api.nvim_buf_set_text(bufnr, srow, scol, erow, ecol, vim.split(new_text, "\n", { plain = true }))
-end
-
-local function add_symbols_around_selection(left_symbol, right_symbol)
-  local selected, srow, scol, erow, ecol = get_selected_text()
-  if not selected then
-    return
-  end
-  replace_selected_text(left_symbol .. selected .. right_symbol, srow, scol, erow, ecol)
-end
-
-local function remove_pairs(left_symbol, right_symbol)
-  local selected, srow, scol, erow, ecol = get_selected_text()
-  if not selected then
-    return
-  end
-  if selected:sub(1, #left_symbol) == left_symbol and selected:sub(-#right_symbol) == right_symbol and #selected >= (#left_symbol + #right_symbol) then
-    local unwrapped = selected:sub(#left_symbol + 1, #selected - #right_symbol)
-    replace_selected_text(unwrapped, srow, scol, erow, ecol)
-  else
-    vim.notify("Selection is not wrapped by expected pair", vim.log.levels.INFO)
-  end
-end
-
-map("x", "<leader>r'", function()
-  remove_pairs("'", "'")
-end, { desc = "unwrap '" })
-map("x", '<leader>r"', function()
-  remove_pairs('"', '"')
-end, { desc = 'unwrap "' })
-map("x", "<leader>r]", function()
-  remove_pairs("[", "]")
-end, { desc = "unwrap []" })
-map("x", "<leader>r}", function()
-  remove_pairs("{", "}")
-end, { desc = "unwrap {}" })
-map("x", "<leader>r)", function()
-  remove_pairs("(", ")")
-end, { desc = "unwrap ()" })
-map("x", "<leader>'", function()
-  add_symbols_around_selection("'", "'")
-end, { desc = "wrap with quote" })
-map("x", '<leader>"', function()
-  add_symbols_around_selection('"', '"')
-end, { desc = "wrap with double quote" })
-map("x", "<leader>]", function()
-  add_symbols_around_selection("[", "]")
-end, { desc = "wrap with []" })
-map("x", "<leader>}", function()
-  add_symbols_around_selection("{", "}")
-end, { desc = "wrap with {}" })
-map("x", "<leader>)", function()
-  add_symbols_around_selection("(", ")")
-end, { desc = "wrap with ()" })
+map("x", "<leader>si", surround.wrap_prompt, { desc = "wrap with input text" })
+map("x", "<leader>ri", surround.unwrap_prompt, { desc = "unwrap input text" })
 
 map("n", "<F5>", function()
   require("dap").continue()
