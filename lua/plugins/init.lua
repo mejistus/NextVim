@@ -294,8 +294,32 @@ return {
     {
         "MeanderingProgrammer/render-markdown.nvim",
         ft = { "markdown", "vimwiki" },
-        dependencies = { "nvim-treesitter/nvim-treesitter", "nvim-mini/mini.nvim" },
+        dependencies = {
+            "nvim-treesitter/nvim-treesitter",
+            "nvim-mini/mini.nvim",
+        },
         config = function()
+            vim.treesitter.language.register("markdown", "vimwiki")
+            require("render-markdown").setup({
+                file_types = {
+                    "markdown",
+                    "vimwiki",
+                },
+                latex = {
+                    enabled = true,
+                    render_modes = false,
+                    converter = {
+                        "utftex",
+                        "latex2text",
+                    },
+                    inline = true,
+                    block = true,
+                    highlight = "RenderMarkdownMath",
+                    position = "center",
+                    top_pad = 0,
+                    bottom_pad = 0,
+                },
+            })
             require("configs.ui").render_markdown()
         end,
     },
