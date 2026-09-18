@@ -324,6 +324,44 @@ return {
         end,
     },
     {
+        "3rd/image.nvim",
+        ft = { "markdown", "vimwiki" },
+        build = false,
+        opts = {
+            backend = "kitty",
+            processor = "magick_cli",
+
+            integrations = {
+                markdown = {
+                    enabled = true,
+                    -- 编辑时是否隐藏图片
+                    clear_in_insert_mode = false,
+                    -- 支持 Markdown 中的远程图片
+                    download_remote_images = true,
+                    -- 推荐：只有光标移动到图片所在位置时才显示
+                    only_render_image_at_cursor = true,
+                    -- popup：悬浮显示
+                    -- inline：直接嵌进正文
+                    only_render_image_at_cursor_mode = "popup",
+
+                    floating_windows = false,
+
+                    filetypes = {
+                        "markdown",
+                        "vimwiki",
+                    },
+                },
+            },
+            -- 限制图片大小，防止一张图占满整个终端
+            max_width = 80,
+            max_height = 30,
+            max_width_window_percentage = 70,
+            max_height_window_percentage = 60,
+            -- Kitty 下建议保持 true
+            kitty_method = "normal",
+        },
+    },
+    {
         "mikesmithgh/kitty-scrollback.nvim",
         enabled = true,
         lazy = true,
