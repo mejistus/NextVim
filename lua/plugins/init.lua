@@ -227,13 +227,11 @@ return {
         keys = {
             { "<leader>ja", "<cmd>JupyterAddCellBelow<CR>",    desc = "Add Jupyter cell below" },
             { "<leader>jA", "<cmd>JupyterAddCellAbove<CR>",    desc = "Add Jupyter cell above" },
-
             { "<leader>jd", "<cmd>JupyterRemoveCell<CR>",      desc = "Remove current Jupyter cell" },
             { "<leader>jm", "<cmd>JupyterMergeCellAbove<CR>",  desc = "Merge with cell above" },
             { "<leader>jM", "<cmd>JupyterMergeCellBelow<CR>",  desc = "Merge with cell below" },
             { "<leader>jt", "<cmd>JupyterConvertCellType<CR>", desc = "Convert cell type (code/markdown)" },
             { "<leader>jD", "<cmd>JupyterDeleteCell<CR>",      desc = "Delete cell under cursor and store in register" },
-
             { "<leader>jm", "<cmd>JupyterMergeVisual<CR>",     mode = "v",                                             desc = "Merge selected cells" },
         },
         opts = {
@@ -307,7 +305,7 @@ return {
                 },
                 latex = {
                     enabled = true,
-                    render_modes = false,
+                    render_modes = { 'n', 'v' },
                     converter = {
                         "utftex",
                         "latex2text",
