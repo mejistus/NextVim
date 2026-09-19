@@ -104,27 +104,82 @@ local function leave_output()
   vim.cmd("wincmd p")
 end
 
---- Does the notebook on disk already carry outputs worth restoring? Checked
---- before importing so an unrun notebook does not warn about having nothing.
+--- Reads the notebook on disk: whether it holds outputs worth restoring, and
+--- the kernel it was written with.
 --- @param path string
---- @return boolean
-local function has_stored_outputs(path)
+--- @return boolean has_outputs, string? kernel
+local function notebook_info(path)
+  if path:sub(-6) ~= ".ipynb" then
+    return false, nil
+  end
   local file = io.open(path, "r")
   if not file then
-    return false
+    return false, nil
   end
   local body = file:read("*a")
   file:close()
   local ok, notebook = pcall(vim.json.decode, body)
   if not ok or type(notebook) ~= "table" or type(notebook.cells) ~= "table" then
-    return false
+    return false, nil
   end
+
+  local has_outputs = false
   for _, cell in ipairs(notebook.cells) do
     if type(cell.outputs) == "table" and #cell.outputs > 0 then
-      return true
+      has_outputs = true
+      break
     end
   end
-  return false
+
+  local kernel = vim.tbl_get(notebook, "metadata", "kernelspec", "name")
+  return has_outputs, type(kernel) == "string" and kernel or nil
+end
+
+--- @return string[]
+local function running_kernels()
+  local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
+  if ok and type(kernels) == "table" then
+    return kernels
+  end
+  return {}
+end
+
+--- Attach the kernel the notebook declares, so reopening one restores its
+--- outputs on its own. Without a kernel there is nothing for molten to hang
+--- imported outputs off, and the notebook comes up blank.
+---
+--- Retries because this runs while the buffer is still being set up: molten is
+--- a python remote plugin, and until its host process answers, the kernel list
+--- comes back empty and there is nothing to match the notebook against.
+--- @param buf integer
+--- @param attempt? integer
+local function auto_init(buf, attempt)
+  attempt = attempt or 1
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  local has_outputs, kernel = notebook_info(vim.api.nvim_buf_get_name(buf))
+  -- Only for a notebook with something to restore: opening a fresh one should
+  -- not cost a kernel process until something is actually run.
+  if not has_outputs or not kernel or #running_kernels() > 0 then
+    return
+  end
+
+  local ok, available = pcall(vim.fn.MoltenAvailableKernels)
+  if not ok or type(available) ~= "table" or #available == 0 then
+    if attempt < 10 then
+      vim.defer_fn(function()
+        auto_init(buf, attempt + 1)
+      end, 200)
+    end
+    return
+  end
+
+  -- Notebooks routinely name a kernel that does not exist on this machine;
+  -- staying quiet beats molten's "Could not initialize kernel" on every open.
+  if vim.tbl_contains(available, kernel) then
+    pcall(vim.cmd, "MoltenInit " .. kernel)
+  end
 end
 
 --- @param buf integer
@@ -145,13 +200,21 @@ function M.setup(file_types)
     group = group,
     callback = function(args)
       map_notebook(args.buf)
+      -- Scheduled: nvim-jupyter-client sets the filetype partway through
+      -- rendering, and the cell text has to be there before molten reads it.
+      vim.schedule(function()
+        auto_init(args.buf)
+      end)
     end,
   })
   -- This runs from molten's config, i.e. after the FileType event that loaded
-  -- it, so the buffer that triggered it needs mapping by hand.
+  -- it, so the buffer that triggered it needs handling by hand.
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.tbl_contains(file_types, vim.bo[buf].filetype) then
       map_notebook(buf)
+      vim.schedule(function()
+        auto_init(buf)
+      end)
     end
   end
 
@@ -176,8 +239,8 @@ function M.setup(file_types)
     pattern = "MoltenInitPost",
     group = group,
     callback = function()
-      local path = vim.fn.expand("%:p")
-      if path:sub(-6) == ".ipynb" and has_stored_outputs(path) then
+      local has_outputs = notebook_info(vim.fn.expand("%:p"))
+      if has_outputs then
         pcall(vim.cmd, "MoltenImportOutput")
       end
     end,
@@ -196,8 +259,7 @@ function M.setup(file_types)
     pattern = "*.ipynb",
     group = group,
     callback = function()
-      local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
-      if ok and type(kernels) == "table" and #kernels > 0 then
+      if #running_kernels() > 0 then
         pcall(vim.cmd, "MoltenExportOutput!")
       end
     end,
