@@ -1,0 +1,36 @@
+#!/bin/sh
+# Render one LaTeX formula to unicode for render-markdown.nvim.
+#
+# utftex exits non-zero on any command it does not recognise -- `\tag{6}` being
+# the common one in papers -- even though it still renders the rest of the
+# formula correctly. render-markdown reads that exit code as total failure and
+# falls through to latex2text, which flattens superscripts into `^geo`; if
+# latex2text is not on PATH it gives up and renders the literal text "error".
+#
+# So: drop the commands that only control numbering, since they have no visual
+# form in unicode, and keep utftex's output whenever it produced any. The tag
+# itself is appended to the last line, the way LaTeX prints it.
+
+formula=$(cat)
+
+tag=$(printf '%s' "$formula" | sed -n 's/.*\\tag\*\{0,1\}{\([^}]*\)}.*/\1/p' | head -1)
+
+stripped=$(printf '%s' "$formula" | sed \
+    -e 's/\\tag\*\{0,1\}{[^}]*}//g' \
+    -e 's/\\label{[^}]*}//g' \
+    -e 's/\\notag//g' \
+    -e 's/\\nonumber//g')
+
+out=$(printf '%s' "$stripped" | utftex 2>/dev/null)
+[ -n "$out" ] || out=$(printf '%s' "$stripped" | latex2text 2>/dev/null)
+[ -n "$out" ] || exit 1
+
+if [ -n "$tag" ]; then
+    printf '%s\n' "$out" | awk -v tag="$tag" '
+        NR > 1 { print prev }
+        { prev = $0 }
+        END { printf "%s   (%s)\n", prev, tag }
+    '
+else
+    printf '%s\n' "$out"
+fi

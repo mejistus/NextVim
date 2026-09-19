@@ -335,6 +335,12 @@ return {
                     enabled = true,
                     render_modes = { 'n', 'v' },
                     converter = {
+                        -- Wrapper: utftex exits non-zero on `\tag{}` and friends
+                        -- even when it rendered the formula fine, which would
+                        -- otherwise demote the whole block to latex2text.
+                        vim.fn.stdpath("config") .. "/scripts/mdtex",
+                        -- Kept so a missing/non-executable wrapper degrades to
+                        -- the previous behaviour instead of rendering nothing.
                         "utftex",
                         "latex2text",
                     },
