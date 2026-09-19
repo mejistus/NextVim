@@ -78,9 +78,4 @@ function M.chafa()
   })
 end
 
-function M.render_markdown()
-  require("render-markdown").setup({ file_types = { "markdown", "vimwiki" } })
-  vim.treesitter.language.register("markdown", "vimwiki")
-end
-
 return M

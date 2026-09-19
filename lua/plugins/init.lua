@@ -269,6 +269,34 @@ return {
     },
 
     {
+        -- The kernel nvim-jupyter-client does not have: it only edits cells.
+        "benlubas/molten-nvim",
+        version = "^1.0.0",
+        -- Loads image.nvim with it, whose own `ft` never fires for a notebook.
+        dependencies = { "3rd/image.nvim" },
+        build = ":UpdateRemotePlugins",
+        -- `.ipynb` buffers are rendered as python. No `cmd` key: the commands
+        -- come from the remote plugin manifest and lazy would shadow them.
+        ft = { "python", "markdown", "quarto" },
+        init = function()
+            require("configs.molten").globals()
+        end,
+        keys = {
+            { "<leader>jr", function() require("configs.molten").run_cell() end, desc = "Run cell" },
+            { "<leader>jR", function() require("configs.molten").run_cell({ advance = true }) end, desc = "Run cell and advance" },
+            { "<leader>jl", "<cmd>MoltenEvaluateLine<CR>",                       desc = "Run current line" },
+            { "<leader>je", ":<C-u>MoltenEvaluateVisual<CR>gv",                  mode = "x",                desc = "Run selection" },
+            { "<leader>jo", "<cmd>MoltenEnterOutput<CR>",                        desc = "Enter cell output" },
+            { "<leader>jh", "<cmd>MoltenHideOutput<CR>",                         desc = "Hide cell output" },
+            { "<leader>ji", "<cmd>MoltenInit<CR>",                               desc = "Attach Jupyter kernel" },
+            { "<leader>jx", "<cmd>MoltenInterrupt<CR>",                          desc = "Interrupt kernel" },
+            { "<leader>jX", "<cmd>MoltenRestart!<CR>",                           desc = "Restart kernel, clear outputs" },
+            { "<leader>jn", function() require("configs.molten").goto_cell(1) end, desc = "Next cell" },
+            { "<leader>jp", function() require("configs.molten").goto_cell(-1) end, desc = "Previous cell" },
+        },
+    },
+
+    {
         "stevearc/oil.nvim",
         lazy = false,
         dependencies = { "nvim-tree/nvim-web-devicons" },
@@ -297,12 +325,12 @@ return {
             "nvim-mini/mini.nvim",
         },
         config = function()
+            local file_types = { "markdown", "vimwiki" }
+            local latex = require("configs.render_latex")
             vim.treesitter.language.register("markdown", "vimwiki")
+            latex.setup(file_types)
             require("render-markdown").setup({
-                file_types = {
-                    "markdown",
-                    "vimwiki",
-                },
+                file_types = file_types,
                 latex = {
                     enabled = true,
                     render_modes = { 'n', 'v' },
@@ -310,20 +338,36 @@ return {
                         "utftex",
                         "latex2text",
                     },
-                    inline = true,
-                    block = true,
                     highlight = "RenderMarkdownMath",
                     position = "center",
                     top_pad = 0,
                     bottom_pad = 0,
                 },
+                anti_conceal = {
+                    -- Keep a formula rendered on the cursor line too. Source is
+                    -- reachable through insert mode, which `render_modes` leaves
+                    -- unrendered.
+                    ignore = { latex = true },
+                },
+                win_options = {
+                    -- Same reason: the default of "" hands the cursor line back
+                    -- to the source in every mode.
+                    concealcursor = { rendered = "nv" },
+                },
+                -- Conceals the source of multi-line `$$` blocks, which the
+                -- builtin latex handler renders alongside the formula.
+                custom_handlers = {
+                    latex = latex.handler,
+                },
             })
-            require("configs.ui").render_markdown()
         end,
     },
     {
         "3rd/image.nvim",
+        -- Also loaded on demand by molten-nvim, which renders cell output
+        -- through it -- `ft` alone would never fire for a notebook buffer.
         ft = { "markdown", "vimwiki" },
+        lazy = true,
         build = false,
         opts = {
             backend = "kitty",

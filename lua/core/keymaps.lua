@@ -152,7 +152,7 @@ end, { desc = "whichkey query lookup" })
 
 local surround = require("configs.surround")
 
--- Fixed pairs keep their dedicated keys; <leader>si / <leader>ri prompt for
+-- Fixed pairs keep their dedicated keys; <leader>si / <leader>sri prompt for
 -- arbitrary text (html tags, \textbf{, **, ...).
 local pairs_map = {
   ["'"] = { "'", "'", "quote" },
@@ -173,7 +173,7 @@ for key, spec in pairs(pairs_map) do
 end
 
 map("x", "<leader>si", surround.wrap_prompt, { desc = "wrap with input text" })
-map("x", "<leader>ri", surround.unwrap_prompt, { desc = "unwrap input text" })
+map("x", "<leader>sri", surround.unwrap_prompt, { desc = "unwrap input text" })
 
 map("n", "<F5>", function()
   require("dap").continue()

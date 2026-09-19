@@ -1,6 +1,6 @@
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
-vim.g.python3_host_prog = "/usr/bin/python"
+vim.g.python3_host_prog = "/opt/homebrew/Caskroom/miniforge/base/envs/repl/bin/python3"
 
 local config_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 vim.opt.rtp:prepend(config_dir)
