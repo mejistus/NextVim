@@ -98,17 +98,142 @@ function M.run_cell(opts)
   end
 end
 
+--- Step back out of molten's output window. It is created non-focusable and
+--- shares the notebook's tab, so `:q` would try to close the notebook instead.
+local function leave_output()
+  vim.cmd("wincmd p")
+end
+
+--- Does the notebook on disk already carry outputs worth restoring? Checked
+--- before importing so an unrun notebook does not warn about having nothing.
+--- @param path string
+--- @return boolean
+local function has_stored_outputs(path)
+  local file = io.open(path, "r")
+  if not file then
+    return false
+  end
+  local body = file:read("*a")
+  file:close()
+  local ok, notebook = pcall(vim.json.decode, body)
+  if not ok or type(notebook) ~= "table" or type(notebook.cells) ~= "table" then
+    return false
+  end
+  for _, cell in ipairs(notebook.cells) do
+    if type(cell.outputs) == "table" and #cell.outputs > 0 then
+      return true
+    end
+  end
+  return false
+end
+
+--- @param buf integer
+local function map_notebook(buf)
+  vim.keymap.set("n", "<S-CR>", function()
+    M.run_cell({ advance = true })
+  end, { buffer = buf, desc = "Run cell and advance" })
+end
+
+--- Autocmds and buffer-local keymaps. Called once, when molten loads.
+--- @param file_types string[] filetypes molten is loaded for
+function M.setup(file_types)
+  local group = vim.api.nvim_create_augroup("MoltenExtras", { clear = true })
+
+  -- Shift+Enter is mapped per buffer so it only means "run" in a notebook.
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = file_types,
+    group = group,
+    callback = function(args)
+      map_notebook(args.buf)
+    end,
+  })
+  -- This runs from molten's config, i.e. after the FileType event that loaded
+  -- it, so the buffer that triggered it needs mapping by hand.
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.tbl_contains(file_types, vim.bo[buf].filetype) then
+      map_notebook(buf)
+    end
+  end
+
+  -- Leaving the output window, rather than :q.
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "molten_output",
+    group = group,
+    callback = function(args)
+      for _, lhs in ipairs({ "<Esc>", "q", "<leader>jo" }) do
+        vim.keymap.set("n", lhs, leave_output, {
+          buffer = args.buf,
+          desc = "Leave cell output",
+        })
+      end
+    end,
+  })
+
+  -- Restore the outputs stored in the .ipynb, so last session's plot is on
+  -- screen without re-running the cell. Needs a kernel to hang them off, which
+  -- is exactly what has just been created.
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "MoltenInitPost",
+    group = group,
+    callback = function()
+      local path = vim.fn.expand("%:p")
+      if path:sub(-6) == ".ipynb" and has_stored_outputs(path) then
+        pcall(vim.cmd, "MoltenImportOutput")
+      end
+    end,
+  })
+
+  -- And write them back when the notebook goes away.
+  --
+  -- Not on write: nvim-jupyter-client claims BufWriteCmd, and a Cmd event
+  -- suppresses BufWritePre/BufWritePost entirely, so there is no post-write
+  -- hook to use. Adding another BufWriteCmd would make this responsible for
+  -- writing the file, which is not a risk worth taking for a side effect.
+  -- These two events only observe, and match what was asked for: keep the
+  -- output when the notebook is closed. The bang means "in place" -- without
+  -- it molten writes a copy-of-<name>.ipynb instead.
+  vim.api.nvim_create_autocmd({ "BufWinLeave", "VimLeavePre" }, {
+    pattern = "*.ipynb",
+    group = group,
+    callback = function()
+      local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
+      if ok and type(kernels) == "table" and #kernels > 0 then
+        pcall(vim.cmd, "MoltenExportOutput!")
+      end
+    end,
+  })
+
+  vim.api.nvim_create_user_command("JupyterSaveOutput", function()
+    pcall(vim.cmd, "MoltenExportOutput!")
+  end, { desc = "Write cell outputs into the .ipynb now" })
+end
+
 --- Set before the remote plugin starts.
 function M.globals()
   -- Without this molten renders images as a text placeholder.
   vim.g.molten_image_provider = "image.nvim"
   vim.g.molten_auto_open_output = true
+  -- Default "open_then_enter" costs two presses of <leader>jo once the window
+  -- has been closed: one to reopen, one to step in. Makes it a real toggle
+  -- against the <Esc> / q / <leader>jo mappings added in setup().
+  vim.g.molten_enter_output_behavior = "open_and_enter"
   vim.g.molten_wrap_output = true
   vim.g.molten_output_show_more = true
   -- Defaults are 999999, which lets one plot take the whole screen.
   vim.g.molten_output_win_max_height = 24
   vim.g.molten_output_win_max_width = 120
-  vim.g.molten_output_win_border = { "", "━", "", "" }
+  -- Each edge is a { char, highlight } pair rather than a bare string. The
+  -- "N More Lines" footer, which only appears once output is taller than
+  -- output_win_max_height, indexes element [1] of the bottom edge for its
+  -- highlight; against a bare "━" that is a second character which does not
+  -- exist, and molten raises IndexError from MoltenTick -- on a timer, so it
+  -- repeats until the editor is unusable.
+  vim.g.molten_output_win_border = {
+    { "", "FloatBorder" },
+    { "━", "FloatBorder" },
+    { "", "FloatBorder" },
+    { "", "FloatBorder" },
+  }
   vim.g.molten_virt_text_output = false
 end
 

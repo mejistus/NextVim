@@ -281,12 +281,18 @@ return {
         init = function()
             require("configs.molten").globals()
         end,
+        config = function()
+            require("configs.molten").setup({ "python", "markdown", "quarto" })
+        end,
         keys = {
             { "<leader>jr", function() require("configs.molten").run_cell() end, desc = "Run cell" },
             { "<leader>jR", function() require("configs.molten").run_cell({ advance = true }) end, desc = "Run cell and advance" },
+            -- Shift+Enter is also mapped, per buffer, in configs.molten.setup.
             { "<leader>jl", "<cmd>MoltenEvaluateLine<CR>",                       desc = "Run current line" },
             { "<leader>je", ":<C-u>MoltenEvaluateVisual<CR>gv",                  mode = "x",                desc = "Run selection" },
-            { "<leader>jo", "<cmd>MoltenEnterOutput<CR>",                        desc = "Enter cell output" },
+            -- Must be `:noautocmd`, per molten's docs: entering the float
+            -- otherwise fires autocmds that immediately close it again.
+            { "<leader>jo", ":noautocmd MoltenEnterOutput<CR>",                  silent = true,             desc = "Enter cell output" },
             { "<leader>jh", "<cmd>MoltenHideOutput<CR>",                         desc = "Hide cell output" },
             { "<leader>ji", "<cmd>MoltenInit<CR>",                               desc = "Attach Jupyter kernel" },
             { "<leader>jx", "<cmd>MoltenInterrupt<CR>",                          desc = "Interrupt kernel" },
