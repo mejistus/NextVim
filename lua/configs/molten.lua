@@ -12,6 +12,10 @@
 
 local M = {}
 
+-- Forward declarations: used by run_cell below, defined further down.
+local running_kernels
+local notebook_info
+
 --- Matches both the plugin's `# %% <id> [<count>]` headers and a plain `# %%`
 --- percent-cell, so ordinary python files with cell markers work too.
 --- @param line string
@@ -75,17 +79,40 @@ function M.goto_cell(step)
   vim.notify("No further jupyter cell", vim.log.levels.INFO)
 end
 
---- Evaluate the cell under the cursor.
+--- Evaluate the cell under the cursor. First run initializes a kernel
+--- (the notebook's, or a prompt) and evaluates once it is ready.
 --- @param opts? table { advance: boolean } move to the next cell afterwards
 function M.run_cell(opts)
   opts = opts or {}
-  local current = cell(vim.api.nvim_get_current_buf())
+  local buf = vim.api.nvim_get_current_buf()
+  local current = cell(buf)
   if not current then
     vim.notify("No jupyter cell here, try <leader>jl or <leader>je", vim.log.levels.WARN)
     return
   end
   if current.markdown then
     vim.notify("Markdown cell, nothing to run", vim.log.levels.INFO)
+    return
+  end
+
+  if #running_kernels() == 0 then
+    -- No kernel anywhere: start one and evaluate when MoltenInitPost fires,
+    -- instead of erroring "not initialized".
+    -- No venv active: default to the system env, no questions asked.
+    local _, kernel = notebook_info(vim.api.nvim_buf_get_name(buf))
+    if os.getenv("VIRTUAL_ENV") == nil and os.getenv("CONDA_PREFIX") == nil then
+      kernel = "python3"
+    end
+    vim.b[buf].molten_pending_eval = {
+      first = current.first,
+      last = current.last,
+      advance = opts.advance,
+    }
+    if kernel then
+      pcall(vim.cmd, "MoltenInit " .. kernel)
+    else
+      pcall(vim.cmd, "MoltenInit")
+    end
     return
   end
 
@@ -108,7 +135,7 @@ end
 --- the kernel it was written with.
 --- @param path string
 --- @return boolean has_outputs, string? kernel
-local function notebook_info(path)
+notebook_info = function(path)
   if path:sub(-6) ~= ".ipynb" then
     return false, nil
   end
@@ -136,7 +163,7 @@ local function notebook_info(path)
 end
 
 --- @return string[]
-local function running_kernels()
+running_kernels = function()
   local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
   if ok and type(kernels) == "table" then
     return kernels
@@ -175,11 +202,102 @@ local function auto_init(buf, attempt)
     return
   end
 
-  -- Notebooks routinely name a kernel that does not exist on this machine;
-  -- staying quiet beats molten's "Could not initialize kernel" on every open.
+  -- Notebook names a kernel this machine does not have: offer to install
+  -- ipykernel with uv (VSCode-style), instead of failing at first run.
   if vim.tbl_contains(available, kernel) then
     pcall(vim.cmd, "MoltenInit " .. kernel)
+  else
+    offer_kernel_install(buf, kernel)
   end
+end
+
+--- Candidate pythons that could back a missing kernel name.
+--- @param kernel string
+--- @return table[] { label: string, python: string }
+local function install_targets(kernel)
+  local home = os.getenv("HOME") or "~"
+  local targets = {}
+  local conda = home .. "/.conda/envs/" .. kernel .. "/bin/python"
+  if vim.fn.executable(conda) == 1 then
+    targets[#targets + 1] = { label = "conda env '" .. kernel .. "'", python = conda }
+  end
+  if vim.fn.executable("/usr/bin/python3") == 1 then
+    targets[#targets + 1] = { label = "system python (as '" .. kernel .. "')", python = "/usr/bin/python3" }
+  end
+  return targets
+end
+
+--- Ask once per buffer whether to `uv pip install ipykernel` for a kernel
+--- the notebook wants but that is not installed. On success the kernelspec
+--- is registered and molten is initialized with it.
+--- @param buf integer
+--- @param kernel string
+function offer_kernel_install(buf, kernel)
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  if vim.b[buf].molten_install_offered then
+    return
+  end
+  vim.b[buf].molten_install_offered = true
+  if vim.fn.executable("uv") ~= 1 then
+    vim.notify("Notebook wants kernel '" .. kernel .. "' (missing); install uv or a kernel manually", vim.log.levels.WARN)
+    return
+  end
+  local targets = install_targets(kernel)
+  if #targets == 0 then
+    vim.notify("Notebook wants kernel '" .. kernel .. "' (missing); no python found", vim.log.levels.WARN)
+    return
+  end
+  local items = { "Cancel" }
+  for _, t in ipairs(targets) do
+    items[#items + 1] = "uv pip install ipykernel into " .. t.label
+  end
+  vim.schedule(function()
+    vim.ui.select(items, { prompt = "Kernel '" .. kernel .. "' not found:" }, function(choice)
+      if not choice or choice == "Cancel" then
+        return
+      end
+      local target
+      for i, t in ipairs(targets) do
+        if items[i + 1] == choice then
+          target = t
+        end
+      end
+      if not target then
+        return
+      end
+      vim.notify("Installing ipykernel into " .. target.label .. " ...", vim.log.levels.INFO)
+      vim.fn.jobstart({ "uv", "pip", "install", "--python", target.python, "ipykernel" }, {
+        on_exit = function(_, code)
+          vim.schedule(function()
+            if code ~= 0 then
+              vim.notify("uv pip install failed (exit " .. code .. ")", vim.log.levels.ERROR)
+              return
+            end
+            local reg = vim.fn.jobstart({
+              target.python, "-m", "ipykernel", "install", "--user",
+              "--name", kernel, "--display-name", "Python (" .. kernel .. ")",
+            }, {
+              on_exit = function(_, rc)
+                vim.schedule(function()
+                  if rc ~= 0 then
+                    vim.notify("ipykernel register failed", vim.log.levels.ERROR)
+                    return
+                  end
+                  vim.notify("Kernel '" .. kernel .. "' ready", vim.log.levels.INFO)
+                  pcall(vim.cmd, "MoltenInit " .. kernel)
+                end)
+              end,
+            })
+            if reg <= 0 then
+              vim.notify("could not start register job", vim.log.levels.ERROR)
+            end
+          end)
+        end,
+      })
+    end)
+  end)
 end
 
 --- @param buf integer
@@ -234,14 +352,27 @@ function M.setup(file_types)
 
   -- Restore the outputs stored in the .ipynb, so last session's plot is on
   -- screen without re-running the cell. Needs a kernel to hang them off, which
-  -- is exactly what has just been created.
+  -- is exactly what has just been created. Also flushes a cell evaluation
+  -- that run_cell deferred while waiting for this kernel.
   vim.api.nvim_create_autocmd("User", {
     pattern = "MoltenInitPost",
     group = group,
-    callback = function()
+    callback = function(args)
       local has_outputs = notebook_info(vim.fn.expand("%:p"))
       if has_outputs then
         pcall(vim.cmd, "MoltenImportOutput")
+      end
+      local pending = vim.b[args.buf].molten_pending_eval
+      vim.b[args.buf].molten_pending_eval = nil
+      if type(pending) == "table" and vim.api.nvim_buf_is_valid(args.buf) then
+        vim.api.nvim_buf_call(args.buf, function()
+          pcall(vim.fn.MoltenEvaluateRange, pending.first, pending.last)
+        end)
+        if pending.advance then
+          vim.api.nvim_buf_call(args.buf, function()
+            M.goto_cell(1)
+          end)
+        end
       end
     end,
   })
