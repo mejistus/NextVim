@@ -307,6 +307,38 @@ local function map_notebook(buf)
   end, { buffer = buf, desc = "Run cell and advance" })
 end
 
+--- Short display string for the statusline: venv and/or running kernel(s).
+--- @return string "" when nothing to show
+local function kernel_display()
+  local segs = {}
+  local venv = os.getenv("CONDA_PREFIX") or os.getenv("VIRTUAL_ENV")
+  if venv then
+    segs[#segs + 1] = "venv:" .. vim.fn.fnamemodify(venv, ":t")
+  end
+  local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
+  if ok and type(kernels) == "table" then
+    local names = {}
+    for k, v in pairs(kernels) do
+      names[#names + 1] = type(v) == "string" and v or tostring(k)
+    end
+    if #names > 0 then
+      table.sort(names)
+      segs[#segs + 1] = "kernel:" .. table.concat(names, ",")
+    end
+  end
+  if #segs == 0 then
+    return ""
+  end
+  return " [" .. table.concat(segs, " ") .. "]"
+end
+
+--- Refresh the buffer-local kernel segment (statusline reads it).
+local function refresh_kernel_display(buf)
+  if vim.api.nvim_buf_is_valid(buf) then
+    vim.b[buf].molten_kernel_display = kernel_display()
+  end
+end
+
 --- Autocmds and buffer-local keymaps. Called once, when molten loads.
 --- @param file_types string[] filetypes molten is loaded for
 function M.setup(file_types)
@@ -399,6 +431,17 @@ function M.setup(file_types)
   vim.api.nvim_create_user_command("JupyterSaveOutput", function()
     pcall(vim.cmd, "MoltenExportOutput!")
   end, { desc = "Write cell outputs into the .ipynb now" })
+
+  -- Statusline segment with venv / running kernel(s). Default vim format
+  -- plus our segment; refreshed on buffer enter and kernel init.
+  vim.o.statusline = "%<%f %h%m%r%=%{get(b:,'molten_kernel_display','')} %-14.(%l,%c%V%) %P"
+  vim.api.nvim_create_autocmd({ "BufEnter", "User" }, {
+    pattern = { "*", "MoltenInitPost" },
+    group = group,
+    callback = function(args)
+      refresh_kernel_display(args.buf)
+    end,
+  })
 end
 
 --- Set before the remote plugin starts.
