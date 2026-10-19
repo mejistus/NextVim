@@ -8,14 +8,14 @@ package.path = config_dir .. "/lua/?.lua;" .. config_dir .. "/lua/?/init.lua;" .
 
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazypath) then
-  vim.fn.system({
-    "git",
-    "clone",
-    "--filter=blob:none",
-    "https://github.com/folke/lazy.nvim.git",
-    "--branch=stable",
-    lazypath,
-  })
+    vim.fn.system({
+        "git",
+        "clone",
+        "--filter=blob:none",
+        "https://github.com/folke/lazy.nvim.git",
+        "--branch=stable",
+        lazypath,
+    })
 end
 vim.opt.rtp:prepend(lazypath)
 
@@ -26,6 +26,6 @@ require("core.highlight")
 require("lazy").setup("plugins", require("configs.lazy"))
 require("configs.theme").setup_persist()
 vim.schedule(function()
-  require("configs.theme").apply_startup_theme()
+    require("configs.theme").apply_startup_theme()
 end)
 require("core.keymaps")

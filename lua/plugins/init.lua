@@ -285,20 +285,20 @@ return {
             require("configs.molten").setup({ "python", "markdown", "quarto" })
         end,
         keys = {
-            { "<leader>jr", function() require("configs.molten").run_cell() end, desc = "Run cell" },
+            { "<leader>jr", function() require("configs.molten").run_cell() end,                   desc = "Run cell" },
             { "<leader>jR", function() require("configs.molten").run_cell({ advance = true }) end, desc = "Run cell and advance" },
             -- Shift+Enter is also mapped, per buffer, in configs.molten.setup.
-            { "<leader>jl", "<cmd>MoltenEvaluateLine<CR>",                       desc = "Run current line" },
-            { "<leader>je", ":<C-u>MoltenEvaluateVisual<CR>gv",                  mode = "x",                desc = "Run selection" },
+            { "<leader>jl", "<cmd>MoltenEvaluateLine<CR>",                                         desc = "Run current line" },
+            { "<leader>je", ":<C-u>MoltenEvaluateVisual<CR>gv",                                    mode = "x",                            desc = "Run selection" },
             -- Must be `:noautocmd`, per molten's docs: entering the float
             -- otherwise fires autocmds that immediately close it again.
-            { "<leader>jo", ":noautocmd MoltenEnterOutput<CR>",                  silent = true,             desc = "Enter cell output" },
-            { "<leader>jh", "<cmd>MoltenHideOutput<CR>",                         desc = "Hide cell output" },
-            { "<leader>ji", "<cmd>MoltenInit<CR>",                               desc = "Attach Jupyter kernel" },
-            { "<leader>jx", "<cmd>MoltenInterrupt<CR>",                          desc = "Interrupt kernel" },
-            { "<leader>jX", "<cmd>MoltenRestart!<CR>",                           desc = "Restart kernel, clear outputs" },
-            { "<leader>jn", function() require("configs.molten").goto_cell(1) end, desc = "Next cell" },
-            { "<leader>jp", function() require("configs.molten").goto_cell(-1) end, desc = "Previous cell" },
+            { "<leader>jo", ":noautocmd MoltenEnterOutput<CR>",                                    silent = true,                         desc = "Enter cell output" },
+            { "<leader>jh", "<cmd>MoltenHideOutput<CR>",                                           desc = "Hide cell output" },
+            { "<leader>ji", "<cmd>MoltenInit<CR>",                                                 desc = "Attach Jupyter kernel" },
+            { "<leader>jx", "<cmd>MoltenInterrupt<CR>",                                            desc = "Interrupt kernel" },
+            { "<leader>jX", "<cmd>MoltenRestart!<CR>",                                             desc = "Restart kernel, clear outputs" },
+            { "<leader>jn", function() require("configs.molten").goto_cell(1) end,                 desc = "Next cell" },
+            { "<leader>jp", function() require("configs.molten").goto_cell(-1) end,                desc = "Previous cell" },
         },
     },
 
@@ -453,6 +453,12 @@ return {
             "MunifTanjim/nui.nvim",
             "nvim-tree/nvim-web-devicons",
             "MeanderingProgrammer/render-markdown.nvim",
+            {
+                "ColinKennedy/mega.cmdparse",
+                dependencies = {
+                    "ColinKennedy/mega.logging",
+                },
+            },
         },
         opts = {
             provider = "siliconflow",
