@@ -1,6 +1,11 @@
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
-vim.g.python3_host_prog = "/usr/bin/python3"
+-- Do not pin g:python3_host_prog. Setting it makes Neovim skip its own "can
+-- this interpreter import pynvim?" check, so a system python without pynvim
+-- (macOS /usr/bin/python3) starts a host that dies at once and every python
+-- remote plugin call reports "channel was closed by the peer" -- molten, on
+-- the first buffer it touches. Unset, Neovim picks a python3 from PATH that
+-- actually has pynvim; `:checkhealth provider` shows what it chose.
 
 local config_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 vim.opt.rtp:prepend(config_dir)

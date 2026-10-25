@@ -162,6 +162,9 @@ notebook_info = function(path)
   return has_outputs, type(kernel) == "string" and kernel or nil
 end
 
+--- May start molten's python host: the remote function is undefined until the
+--- host has answered once, and calling it runs the bootstrap that starts it.
+--- Callers that must not pay for a host (the statusline) check first.
 --- @return string[]
 running_kernels = function()
   local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
@@ -308,22 +311,20 @@ local function map_notebook(buf)
 end
 
 --- Short display string for the statusline: venv and/or running kernel(s).
+--- @param query_kernels boolean ask molten for the buffer's kernel list
 --- @return string "" when nothing to show
-local function kernel_display()
+local function kernel_display(query_kernels)
   local segs = {}
   local venv = os.getenv("CONDA_PREFIX") or os.getenv("VIRTUAL_ENV")
   if venv then
     segs[#segs + 1] = "venv:" .. vim.fn.fnamemodify(venv, ":t")
   end
-  local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
-  if ok and type(kernels) == "table" then
-    local names = {}
-    for k, v in pairs(kernels) do
-      names[#names + 1] = type(v) == "string" and v or tostring(k)
-    end
-    if #names > 0 then
-      table.sort(names)
-      segs[#segs + 1] = "kernel:" .. table.concat(names, ",")
+  if query_kernels then
+    -- Buffer-local kernel ids, a plain list.
+    local kernels = running_kernels()
+    if #kernels > 0 then
+      table.sort(kernels)
+      segs[#segs + 1] = "kernel:" .. table.concat(kernels, ",")
     end
   end
   if #segs == 0 then
@@ -333,10 +334,19 @@ local function kernel_display()
 end
 
 --- Refresh the buffer-local kernel segment (statusline reads it).
-local function refresh_kernel_display(buf)
-  if vim.api.nvim_buf_is_valid(buf) then
-    vim.b[buf].molten_kernel_display = kernel_display()
+--- @param buf integer
+--- @param force? boolean ask even if molten's host has not answered yet
+local function refresh_kernel_display(buf, force)
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
   end
+  -- Drawing a statusline must not start a python host. Until the host has
+  -- answered once MoltenRunningKernels is undefined, and calling it would run
+  -- the bootstrap that starts one just to be told there are no kernels. Only
+  -- MoltenInitPost/DeinitPost, where the host is known to be alive, force the
+  -- query.
+  local query = force or vim.fn.exists("*MoltenRunningKernels") == 1
+  vim.b[buf].molten_kernel_display = kernel_display(query)
 end
 
 --- Autocmds and buffer-local keymaps. Called once, when molten loads.
@@ -422,7 +432,9 @@ function M.setup(file_types)
     pattern = "*.ipynb",
     group = group,
     callback = function()
-      if #running_kernels() > 0 then
+      -- No host, no kernel, and nothing to export: don't start one on the way
+      -- out just to ask.
+      if vim.fn.exists("*MoltenRunningKernels") == 1 and #running_kernels() > 0 then
         pcall(vim.cmd, "MoltenExportOutput!")
       end
     end,
@@ -435,11 +447,26 @@ function M.setup(file_types)
   -- Statusline segment with venv / running kernel(s). Default vim format
   -- plus our segment; refreshed on buffer enter and kernel init.
   vim.o.statusline = "%<%f %h%m%r%=%{get(b:,'molten_kernel_display','')} %-14.(%l,%c%V%) %P"
-  vim.api.nvim_create_autocmd({ "BufEnter", "User" }, {
-    pattern = { "*", "MoltenInitPost" },
+  vim.api.nvim_create_autocmd("BufEnter", {
+    pattern = "*",
     group = group,
     callback = function(args)
       refresh_kernel_display(args.buf)
+    end,
+  })
+  -- Separate from BufEnter on purpose. An autocmd takes one pattern list for
+  -- all of its events, so a bare "*" registered alongside the User event
+  -- matches every User event in the editor: lazy fires LazyLoad/LazyRender
+  -- while plugins load and conform fires ConformFormatPre/Post on every save.
+  -- Each of those would ask molten for its kernels -- starting the python host
+  -- to answer a statusline question during an unrelated save.
+  vim.api.nvim_create_autocmd("User", {
+    pattern = { "MoltenInitPost", "MoltenDeinitPost" },
+    group = group,
+    callback = function(args)
+      -- Forced: molten has just called us from its python host, so it is
+      -- running, and the first query is what defines MoltenRunningKernels.
+      refresh_kernel_display(args.buf, true)
     end,
   })
 end
