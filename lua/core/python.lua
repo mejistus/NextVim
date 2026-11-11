@@ -6,6 +6,9 @@
 --- /usr/bin/python3 and the molten remote-plugin host would fail. Verify the
 --- import before pinning: setting g:python3_host_prog makes Neovim skip its
 --- own check, so an unusable interpreter must never be forced on it.
+---
+--- An explicit PYTHON3_HOST_PROG is honored in every mode, which lets a
+--- remote/terminal setup pin a venv without depending on the shell PATH.
 local M = {}
 
 local function probe(prog)
@@ -54,6 +57,12 @@ local function candidates()
 end
 
 function M.setup_host()
+  local explicit = vim.env.PYTHON3_HOST_PROG
+  if explicit and explicit ~= "" and probe(explicit) then
+    vim.g.python3_host_prog = explicit
+    return explicit
+  end
+
   -- A terminal Neovim inherits the shell PATH and can let the provider detect
   -- the active conda/pyenv interpreter itself. Only a GUI launch needs a pin.
   if not vim.g.neovide then
