@@ -311,6 +311,7 @@ function M.open()
 
   define_highlights()
 
+  local startup_buf = vim.api.nvim_get_current_buf()
   local bufnr = vim.api.nvim_create_buf(false, true)
   state.bufnr = bufnr
 
@@ -327,6 +328,22 @@ function M.open()
   vim.wo.signcolumn = "no"
   vim.wo.foldcolumn = "0"
   vim.wo.list = false
+
+  -- Neovim starts with an unnamed, listed, empty buffer. The welcome screen
+  -- replaces it in the current window but it would stay in the buffer list,
+  -- showing up as a stray blank buffer once a file is opened (including files
+  -- opened through Neovide's macOS "Open With" event, which starts Neovim
+  -- without file arguments). Drop it when it is safe to do so.
+  if
+    startup_buf ~= bufnr
+    and vim.api.nvim_buf_is_valid(startup_buf)
+    and vim.bo[startup_buf].buftype == ""
+    and vim.api.nvim_buf_get_name(startup_buf) == ""
+    and not vim.bo[startup_buf].modified
+    and #vim.fn.win_findbuf(startup_buf) == 0
+  then
+    vim.api.nvim_buf_delete(startup_buf, { force = true })
+  end
 
   set_keymaps(bufnr)
   render()
