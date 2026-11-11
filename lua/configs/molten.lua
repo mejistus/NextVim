@@ -473,8 +473,9 @@ end
 
 --- Set before the remote plugin starts.
 function M.globals()
-  -- Without this molten renders images as a text placeholder.
-  vim.g.molten_image_provider = "image.nvim"
+  -- image.nvim needs Kitty's graphics protocol; Neovide provides neither a
+  -- terminal nor that protocol, so leave molten's text placeholder in place.
+  vim.g.molten_image_provider = vim.g.neovide and "none" or "image.nvim"
   vim.g.molten_auto_open_output = true
   -- Default "open_then_enter" costs two presses of <leader>jo once the window
   -- has been closed: one to reopen, one to step in. Makes it a real toggle

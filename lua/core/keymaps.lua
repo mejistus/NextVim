@@ -43,7 +43,27 @@ local function smart_close_fold()
 end
 
 map("n", ";;", "<cmd>noh<CR>", { desc = "clear highlights" })
-map("n", "F", vim.lsp.buf.hover, { desc = "lsp hover" })
+--- Enter molten's output window when one is visible; otherwise show LSP hover.
+--- Molten's output window is non-focusable, so use its own command; fall back
+--- to nvim_set_current_win only if the command is not available.
+local function hover_or_cell_output()
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "molten_output" then
+      if win ~= vim.api.nvim_get_current_win() then
+        if not pcall(vim.cmd, "noautocmd MoltenEnterOutput") then
+          pcall(vim.api.nvim_set_current_win, win)
+        end
+      end
+      return
+    end
+  end
+
+  if #vim.lsp.get_clients({ bufnr = 0 }) > 0 then
+    vim.lsp.buf.hover()
+  end
+end
+
+map("n", "F", hover_or_cell_output, { desc = "lsp hover / enter cell output" })
 map("n", "zc", smart_close_fold, { desc = "smart close fold" })
 -- Backslash prefix: window management.
 map("n", "\\v", "<cmd>vsplit<CR>", { desc = "window split vertical" })

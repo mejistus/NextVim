@@ -376,6 +376,9 @@ return {
     },
     {
         "3rd/image.nvim",
+        -- Neovide is a GUI without a terminal and does not implement Kitty's
+        -- graphics protocol; image.nvim cannot render there.
+        enabled = not vim.g.neovide,
         -- Also loaded on demand by molten-nvim, which renders cell output
         -- through it -- `ft` alone would never fire for a notebook buffer.
         ft = { "markdown", "vimwiki" },
