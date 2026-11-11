@@ -692,3 +692,24 @@ map("n", "<leader>tp", function()
   })
   vim.fn.termopen("btop")
 end, { desc = "run btop" })
+
+-- Neovide only forwards keys; it does not add macOS clipboard shortcuts the
+-- way iTerm2 does. Map Cmd-C/Cmd-V to the system clipboard so paste works in
+-- every mode. https://neovide.dev/faq.html
+if vim.g.neovide then
+  local function paste()
+    vim.api.nvim_paste(vim.fn.getreg("+"), true, -1)
+  end
+
+  local function copy()
+    vim.cmd([[normal! "+y]])
+  end
+
+  vim.keymap.set("v", "<D-c>", copy, { silent = true, desc = "Copy to system clipboard" })
+  vim.keymap.set(
+    { "n", "i", "v", "c", "t" },
+    "<D-v>",
+    paste,
+    { silent = true, desc = "Paste from system clipboard" }
+  )
+end

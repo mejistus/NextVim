@@ -42,3 +42,30 @@ o.foldlevel = 99
 o.foldlevelstart = 99
 o.viewoptions = "folds,cursor,curdir,slash,unix"
 o.conceallevel = 1
+
+-- Neovide: keep SF Mono as the primary face, but fall back to a Nerd Font for
+-- devicons/statusline glyphs, Symbols Nerd Font for stray PUA icons, Apple
+-- Color Emoji for emoji, and PingFang SC for CJK. Without the fallbacks those
+-- glyphs render as tofu boxes in Neovide.
+if vim.g.neovide then
+  o.guifont = "SF Mono,Maple Mono NF,Symbols Nerd Font,Apple Color Emoji,PingFang SC:h14"
+end
+
+-- Do not block on "Press ENTER" for messages longer than 'cmdheight'. Show
+-- them briefly instead; the full history is still available via :messages.
+if vim.fn.exists("&messagesopt") == 1 then
+  o.messagesopt = "history:500,progress:c,wait:2000"
+end
+
+-- nvim-jupyter-client logs "Initializing notebook for: <path>" at DEBUG level
+-- on every .ipynb open. The path wraps in a one-line cmdline and forces a
+-- hit-enter prompt before the buffer is usable. Drop TRACE/DEBUG notifications
+-- globally and keep INFO and above.
+local notify = vim.notify
+vim.notify = function(msg, level, opts)
+  level = level or vim.log.levels.INFO
+  if level <= vim.log.levels.DEBUG then
+    return
+  end
+  return notify(msg, level, opts)
+end
