@@ -43,17 +43,35 @@ local function smart_close_fold()
 end
 
 map("n", ";;", "<cmd>noh<CR>", { desc = "clear highlights" })
---- Enter molten's output window when one is visible; otherwise show LSP hover.
---- Molten's output window is non-focusable, so use its own command; fall back
---- to nvim_set_current_win only if the command is not available.
-local function hover_or_cell_output()
+--- Enter or reopen molten's output window when the current buffer has a
+--- kernel; otherwise show LSP hover. MoltenEnterOutput is what <leader>jo
+--- uses, so it also reopens an output window that was hidden on leave.
+local function has_molten_kernel()
+  -- The remote function only exists after molten's python host has answered,
+  -- so querying it cannot start the host just to answer this keymap.
+  if vim.fn.exists("*MoltenRunningKernels") ~= 1 then
+    return false
+  end
+  local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
+  return ok and type(kernels) == "table" and #kernels > 0
+end
+
+local function output_window_visible()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "molten_output" then
-      if win ~= vim.api.nvim_get_current_win() then
-        if not pcall(vim.cmd, "noautocmd MoltenEnterOutput") then
-          pcall(vim.api.nvim_set_current_win, win)
-        end
-      end
+      return true
+    end
+  end
+  return false
+end
+
+local function hover_or_cell_output()
+  if has_molten_kernel() or output_window_visible() then
+    local before = vim.api.nvim_get_current_win()
+    if
+      pcall(vim.cmd, "noautocmd MoltenEnterOutput")
+      and (vim.api.nvim_get_current_win() ~= before or vim.bo.filetype == "molten_output")
+    then
       return
     end
   end
