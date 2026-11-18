@@ -29,9 +29,28 @@ require("nvim-dap-virtual-text").setup({
   virt_text_win_col = nil,
 })
 
+--- The system interpreter that replaces the old ~/.virtualenvs/neovim env.
+--- Fixed locations are checked in order; PYTHON3_HOST_PROG still overrides.
+local function system_python()
+  local explicit = vim.env.PYTHON3_HOST_PROG
+  if explicit and explicit ~= "" and vim.fn.executable(explicit) == 1 then
+    return explicit
+  end
+  for _, prog in ipairs({
+    "/opt/homebrew/bin/python3",
+    "/usr/local/bin/python3",
+    "/usr/bin/python3",
+  }) do
+    if vim.fn.executable(prog) == 1 then
+      return prog
+    end
+  end
+  return vim.fn.exepath("python3")
+end
+
 dap.adapters.python = {
   type = "executable",
-  command = "python",
+  command = system_python(),
   args = { "-m", "debugpy.adapter" },
 }
 
@@ -41,9 +60,7 @@ dap.configurations.python = {
     request = "launch",
     name = "Launch file",
     program = "${file}",
-    pythonPath = function()
-      return os.getenv("HOME") .. "/.virtualenvs/neovim/bin/python"
-    end,
+    pythonPath = system_python,
   },
 }
 

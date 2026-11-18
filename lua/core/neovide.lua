@@ -54,7 +54,6 @@ local function gui_paths()
     vim.fn.expand("~/.local/share/nvim/mason/bin"),
     vim.fn.expand("~/.cargo/bin"),
     vim.fn.expand("~/.npm-global/bin"),
-    vim.fn.expand("~/.virtualenvs/neovim/bin"),
   })
   vim.list_extend(entries, conda_bins())
   entries[#entries + 1] = "/usr/local/bin"

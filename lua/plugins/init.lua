@@ -294,7 +294,7 @@ return {
             -- otherwise fires autocmds that immediately close it again.
             { "<leader>jo", ":noautocmd MoltenEnterOutput<CR>",                                    silent = true,                         desc = "Enter cell output" },
             { "<leader>jh", "<cmd>MoltenHideOutput<CR>",                                           desc = "Hide cell output" },
-            { "<leader>ji", "<cmd>MoltenInit<CR>",                                                 desc = "Attach Jupyter kernel" },
+            { "<leader>ji", function() require("configs.molten").pick_kernel() end,                desc = "Attach Jupyter kernel" },
             { "<leader>jx", "<cmd>MoltenInterrupt<CR>",                                            desc = "Interrupt kernel" },
             { "<leader>jX", "<cmd>MoltenRestart!<CR>",                                             desc = "Restart kernel, clear outputs" },
             { "<leader>jn", function() require("configs.molten").goto_cell(1) end,                 desc = "Next cell" },

@@ -174,6 +174,147 @@ running_kernels = function()
   return {}
 end
 
+--- Interpreter that runs molten's python host. Its jupyter_client is the same
+--- one molten enumerates kernels with.
+--- @return string
+local function host_python()
+  local pinned = vim.g.python3_host_prog
+  if type(pinned) == "string" and pinned ~= "" then
+    local prog = vim.fn.expand(pinned, true)
+    if vim.fn.executable(prog) == 1 then
+      return prog
+    end
+  end
+  local found = vim.fn.exepath("python3")
+  if found ~= "" then
+    return found
+  end
+  return "/usr/bin/python3"
+end
+
+--- Enumerate kernelspecs with jupyter_client and drop every kernel whose
+--- environment is gone. Jupyter keeps a kernelspec after its env is deleted,
+--- so molten's own MoltenInit prompt happily lists `reward_server` or `learner`
+--- and then fails to start them. A kernel counts as usable when its
+--- interpreter exists and can import ipykernel.
+local KERNEL_SCAN = [[
+import json, os, shutil, subprocess
+from concurrent.futures import ThreadPoolExecutor
+from jupyter_client.kernelspec import KernelSpecManager
+
+def usable(prog):
+    if not prog:
+        return False
+    if not os.path.isabs(prog):
+        prog = shutil.which(prog) or prog
+    if not (os.path.isfile(prog) and os.access(prog, os.X_OK)):
+        return False
+    try:
+        subprocess.run(
+            [prog, "-W", "ignore", "-c", "import ipykernel"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+            check=True,
+        )
+        return True
+    except Exception:
+        return False
+
+manager = KernelSpecManager()
+specs = []
+for name in sorted(manager.find_kernel_specs()):
+    try:
+        spec = manager.get_kernel_spec(name)
+    except Exception:
+        continue
+    if spec.language != "python":
+        continue
+    prog = spec.argv[0] if spec.argv else ""
+    if prog and not os.path.isabs(prog):
+        prog = shutil.which(prog) or prog
+    specs.append((name, prog))
+
+with ThreadPoolExecutor(max_workers=8) as pool:
+    flags = list(pool.map(lambda item: usable(item[1]), specs))
+
+print(json.dumps([
+    {"name": name, "python": prog}
+    for (name, prog), ok in zip(specs, flags)
+    if ok
+]))
+]]
+
+--- Kernels that can actually be started.
+--- @return table[]? list of { name: string, python: string }, or nil and an error
+function M.usable_kernels()
+  local ok, out = pcall(function()
+    return vim.system({ host_python(), "-W", "ignore", "-c", KERNEL_SCAN }, { text = true }):wait(30000)
+  end)
+  if not ok then
+    return nil, out
+  end
+  if out.code ~= 0 then
+    return nil, out.stderr ~= "" and out.stderr or "kernel scan failed"
+  end
+  local decoded, kernels = pcall(vim.json.decode, out.stdout)
+  if not decoded or type(kernels) ~= "table" then
+    return nil, "could not parse kernel scan output"
+  end
+  return kernels
+end
+
+--- `<leader>ji`: pick a kernel, listing only environments that still exist.
+--- Running (shared) kernels are offered as well, matching MoltenInit's prompt.
+function M.pick_kernel()
+  local kernels, err = M.usable_kernels()
+  if not kernels then
+    vim.notify("Jupyter kernels: " .. tostring(err), vim.log.levels.ERROR)
+    return
+  end
+
+  -- String items, so vim.ui.select renders them the same with or without a
+  -- ui.select implementation that understands format_item.
+  local action = {}
+  local items = {}
+  for _, kernel in ipairs(kernels) do
+    local label = kernel.name
+    if kernel.python ~= "" then
+      label = label .. "  " .. kernel.python
+    end
+    items[#items + 1] = label
+    action[label] = { name = kernel.name, shared = false }
+  end
+
+  local ok, running = pcall(vim.fn.MoltenRunningKernels, false)
+  if ok and type(running) == "table" then
+    for _, name in ipairs(running) do
+      local label = "(shared) " .. name
+      items[#items + 1] = label
+      action[label] = { name = name, shared = true }
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("No usable Jupyter kernel found", vim.log.levels.WARN)
+    return
+  end
+
+  vim.ui.select(items, { prompt = "Attach Jupyter kernel" }, function(choice)
+    local item = choice and action[choice]
+    if not item then
+      return
+    end
+    vim.schedule(function()
+      if item.shared then
+        pcall(vim.cmd, "MoltenInit shared " .. item.name)
+      else
+        pcall(vim.cmd, "MoltenInit " .. item.name)
+      end
+    end)
+  end)
+end
+
 --- Attach the kernel the notebook declares, so reopening one restores its
 --- outputs on its own. Without a kernel there is nothing for molten to hang
 --- imported outputs off, and the notebook comes up blank.
