@@ -43,13 +43,8 @@ o.foldlevelstart = 99
 o.viewoptions = "folds,cursor,curdir,slash,unix"
 o.conceallevel = 1
 
--- Neovide: keep SF Mono as the primary face, but fall back to a Nerd Font for
--- devicons/statusline glyphs, Symbols Nerd Font for stray PUA icons, Apple
--- Color Emoji for emoji, and PingFang SC for CJK. Without the fallbacks those
--- glyphs render as tofu boxes in Neovide.
-if vim.g.neovide then
-  o.guifont = "SF Mono,Maple Mono NF,Symbols Nerd Font,Apple Color Emoji,PingFang SC:h14"
-end
+-- Neovide's guifont/guifontwide/linespace and other GUI globals live in
+-- core.neovide (init.lua calls setup_ui right after this file).
 
 -- Do not block on "Press ENTER" for messages longer than 'cmdheight'. Show
 -- them briefly instead; the full history is still available via :messages.

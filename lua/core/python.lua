@@ -56,11 +56,32 @@ local function candidates()
   return list
 end
 
+--- Remember the interpreter and, in Neovide, put its bin directory first on
+--- PATH. The shell's `python` is the active conda env (debugpy, jupyter,
+--- pip); a Finder launch would otherwise resolve it to conda's base env,
+--- which has none of those, so DAP's `python -m debugpy.adapter` would fail.
+--- Terminal Neovim already has the shell PATH; leave it alone there.
+local function pin(prog)
+  vim.g.python3_host_prog = prog
+  if vim.g.neovide then
+    local dir = vim.fn.fnamemodify(prog, ":h")
+    local seen = { [dir] = true }
+    local paths = { dir }
+    for _, entry in ipairs(vim.split(vim.env.PATH or "", ":", { plain = true })) do
+      if entry ~= "" and not seen[entry] then
+        seen[entry] = true
+        paths[#paths + 1] = entry
+      end
+    end
+    vim.env.PATH = table.concat(paths, ":")
+  end
+  return prog
+end
+
 function M.setup_host()
   local explicit = vim.env.PYTHON3_HOST_PROG
   if explicit and explicit ~= "" and probe(explicit) then
-    vim.g.python3_host_prog = explicit
-    return explicit
+    return pin(explicit)
   end
 
   -- A terminal Neovim inherits the shell PATH and can let the provider detect
@@ -70,7 +91,7 @@ function M.setup_host()
   end
 
   if type(vim.g.python3_host_prog) == "string" and vim.g.python3_host_prog ~= "" then
-    return vim.g.python3_host_prog
+    return pin(vim.g.python3_host_prog)
   end
 
   local fallback
@@ -78,8 +99,7 @@ function M.setup_host()
     local has_pynvim, has_jupyter = probe(prog)
     if has_pynvim then
       if has_jupyter then
-        vim.g.python3_host_prog = prog
-        return prog
+        return pin(prog)
       end
       fallback = fallback or prog
     end
@@ -88,8 +108,7 @@ function M.setup_host()
   -- pynvim works but jupyter_client is missing: still start the provider and
   -- let core.runtime's warning tell the user which package to install.
   if fallback then
-    vim.g.python3_host_prog = fallback
-    return fallback
+    return pin(fallback)
   end
 end
 
