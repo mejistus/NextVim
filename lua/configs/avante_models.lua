@@ -377,21 +377,6 @@ function M.setup_commands(provider_name, endpoint)
         desc = "Manage opencode_gateway model ids",
         complete = complete,
     })
-
-    if #M.state.models == 0 then
-        vim.schedule(function()
-            if #M.state.models > 0 then
-                return
-            end
-            notify(
-                "no opencode_gateway models configured. Add one with :AvanteModel add "
-                    .. "(or edit "
-                    .. store_path()
-                    .. ")",
-                vim.log.levels.WARN
-            )
-        end)
-    end
 end
 
 return M
