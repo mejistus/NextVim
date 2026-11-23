@@ -1,4 +1,6 @@
-local function siliconflow_parse_curl_args(provider, prompt_opts)
+-- For OpenAI-compatible endpoints: keep curl unbuffered (`-N`), force SSE
+-- streaming, and drop `stream_options`, which not every gateway accepts.
+local function openai_compat_parse_curl_args(provider, prompt_opts)
     local spec = require("avante.providers.openai").parse_curl_args(provider, prompt_opts)
     if not spec then
         return nil
@@ -10,6 +12,13 @@ local function siliconflow_parse_curl_args(provider, prompt_opts)
 
     return spec
 end
+
+-- opencode-gateway runs locally and serves an OpenAI-compatible API.
+local OPENCODE_GATEWAY_ENDPOINT = "http://127.0.0.1:12315/v1"
+-- Model ids are user data, not config: they live in
+-- ~/.config/avante.nvim/gateway-models.json and are managed with
+-- :AvanteModel add|set|remove|list.
+local gateway_models = require("configs.avante_models").load()
 
 return {
     {
@@ -464,49 +473,29 @@ return {
             },
         },
         opts = {
-            provider = "siliconflow",
+            provider = "opencode_gateway",
             providers = {
-                siliconflow = {
+                -- Local opencode-gateway (https://github.com/mejistus/opencode-gateway).
+                -- One process on 127.0.0.1:12315 serves both OpenAI- and
+                -- Anthropic-style APIs; it injects the real OpenCode Go key.
+                opencode_gateway = {
                     __inherited_from = "openai",
-                    endpoint = "https://api.siliconflow.cn/v1",
-                    api_key_name = "SILICONFLOW_API_TOKEN",
-                    model = "Qwen/Qwen3.5-9B",
-                    timeout = 30000,
-                    disable_tools = true,
+                    endpoint = OPENCODE_GATEWAY_ENDPOINT,
+                    -- Any non-empty token is accepted. `cmd:` keeps this working
+                    -- under a Finder-launched Neovide, which has no shell env.
+                    api_key_name = "cmd:echo local",
+                    -- Both fields come from the user's registry; either can be
+                    -- nil/empty, and :AvanteModel fills them in.
+                    model = gateway_models.model,
+                    model_names = gateway_models.models,
+                    -- The -max alias can think for minutes; 30s is not enough.
+                    timeout = 300000,
                     rawArgs = { "-N" },
-                    parse_curl_args = siliconflow_parse_curl_args,
+                    parse_curl_args = openai_compat_parse_curl_args,
                     extra_request_body = {
                         max_tokens = 8192,
                         temperature = 0.0,
                         stream = true,
-                        enable_thinking = true,
-                    },
-                    model_names = {
-                        "Pro/zai-org/GLM-4.7",
-                        "Qwen/Qwen3.5-4B",
-                        "Qwen/Qwen3.5-9B",
-                        "Qwen/Qwen3-32B",
-                        "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-                    },
-                },
-                siliconflow_no_think = {
-                    __inherited_from = "openai",
-                    endpoint = "https://api.siliconflow.cn/v1",
-                    model = "deepseek-ai/DeepSeek-V3.2",
-                    api_key_name = "SILICONFLOW_API_TOKEN",
-                    timeout = 30000,
-                    disable_tools = true,
-                    rawArgs = { "-N" },
-                    parse_curl_args = siliconflow_parse_curl_args,
-                    extra_request_body = {
-                        max_tokens = 8192,
-                        temperature = 0.0,
-                        stream = true,
-                    },
-                    model_names = {
-                        "Pro/zai-org/GLM-4.7",
-                        "deepseek-ai/DeepSeek-V3.2",
-                        "deepseek-ai/DeepSeek-V3",
                     },
                 },
             },
@@ -553,6 +542,7 @@ return {
             vim.keymap.set("n", "\\<Tab>", function()
                 require("avante").toggle()
             end, { desc = "avante: toggle", noremap = true, silent = true })
+            require("configs.avante_models").setup_commands("opencode_gateway", OPENCODE_GATEWAY_ENDPOINT)
         end,
     },
 }

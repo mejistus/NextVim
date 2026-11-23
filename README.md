@@ -15,6 +15,23 @@ This directory is a standalone Neovim configuration based on `lazy.nvim`.
 - `lua/plugins`: plugin spec
 - `lua/configs`: per-plugin setup
 
+## Avante models
+
+The `opencode_gateway` provider points at the local opencode-gateway
+(`http://127.0.0.1:12315/v1`) and ships no model ids. Vim stores the ids you add
+in `~/.config/avante.nvim/gateway-models.json` and manages them with:
+
+| Command | Action |
+|---|---|
+| `:AvanteModel add <id>` | add an id (no id: pick from the gateway's `/v1/models`) |
+| `:AvanteModel set <id>` | make it the active model |
+| `:AvanteModel remove <id>` | remove it |
+| `:AvanteModel list` | show ids, active one marked `*` |
+
+The avante model picker (`<Space>a?` or `:AvanteModels`) switches among the ids
+you have added. You can also edit the file by hand:
+`{ "model": "<id>", "models": ["<id>", ...] }`.
+
 ## Neovide
 
 Neovide 0.17+ is supported. A GUI launch (Finder or "Open With") inherits
