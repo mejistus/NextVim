@@ -43,6 +43,13 @@ o.foldlevelstart = 99
 o.viewoptions = "folds,cursor,curdir,slash,unix"
 o.conceallevel = 1
 
+-- Keep the undo tree across sessions. The undo file is written whenever the
+-- buffer is written, so reopening a file still lets you walk back through
+-- edits from earlier sessions.
+o.undofile = true
+o.undodir = vim.fn.stdpath("state") .. "/undo"
+vim.fn.mkdir(o.undodir, "p")
+
 -- Neovide's guifont/guifontwide/linespace and other GUI globals live in
 -- core.neovide (init.lua calls setup_ui right after this file).
 

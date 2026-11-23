@@ -657,23 +657,74 @@ map("n", "<C-q>", function()
   vim.fn.termopen("easy " .. current_file)
 end, { desc = "run source code" })
 
-map("n", "<leader>fy", function()
-  local width = vim.o.columns * 0.5
-  local height = vim.o.lines * 0.5
-  local word = vim.fn.expand("<cword>")
+local function fanyi_visual_selection()
+  local mode = vim.fn.mode()
+  local seltype = mode == "V" and "V" or (mode == "\22" and "\22" or "v")
+  local lines = vim.fn.getregion(vim.fn.getpos("v"), vim.fn.getpos("."), { type = seltype })
+  return table.concat(lines, "\n")
+end
+
+local function fanyi_open(text)
+  text = vim.trim(text or "")
+  if text == "" then
+    vim.notify("fanyi: no text selected", vim.log.levels.WARN)
+    return
+  end
+
+  local width = math.max(40, math.min(vim.o.columns - 4, math.floor(vim.o.columns * 0.6)))
+  local height = math.max(10, math.min(vim.o.lines - 4, math.floor(vim.o.lines * 0.5)))
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-  vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
-  vim.api.nvim_open_win(buf, true, {
-    relative = "cursor",
-    width = math.ceil(width),
-    height = math.ceil(height),
-    col = 0,
-    row = 1,
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    style = "minimal",
     border = "rounded",
+    width = width,
+    height = height,
+    row = math.floor((vim.o.lines - height) / 2),
+    col = math.floor((vim.o.columns - width) / 2),
   })
-  vim.fn.termopen("fanyi " .. word)
+
+  local function close()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+    if vim.api.nvim_buf_is_valid(buf) then
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+  end
+
+  -- List form skips the shell, so spaces, quotes and newlines in the
+  -- selection stay in one argument. "--" keeps a leading dash from being
+  -- parsed as a fanyi flag.
+  local ok, err = pcall(vim.fn.termopen, { "fanyi", "--", text }, {
+    on_exit = function(_, code)
+      vim.schedule(function()
+        if not vim.api.nvim_buf_is_valid(buf) then
+          return
+        end
+        vim.keymap.set({ "n", "t" }, "q", close, { buffer = buf, nowait = true, silent = true })
+        vim.keymap.set({ "n", "t" }, "<Esc>", close, { buffer = buf, nowait = true, silent = true })
+        if code ~= 0 and code ~= 130 then
+          vim.notify("fanyi exited with code " .. code, vim.log.levels.WARN)
+        end
+      end)
+    end,
+  })
+  if not ok then
+    close()
+    vim.notify("fanyi failed to start: " .. tostring(err), vim.log.levels.ERROR)
+    return
+  end
+  vim.cmd("startinsert")
+end
+
+map("n", "<leader>fy", function()
+  fanyi_open(vim.fn.expand("<cword>"))
 end, { desc = "translate word" })
+
+map("x", "<leader>fy", function()
+  fanyi_open(fanyi_visual_selection())
+end, { desc = "translate selection" })
 
 map("n", "<leader>tp", function()
   local width = 80
